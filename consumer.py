@@ -2,6 +2,7 @@ import boto3
 import time
 import json
 import jsonschema
+import argparse
 
 REQUESTS_BUCKET = "usu-cs5250-ratatouille-requests"
 JSON_SCHEMA = {
@@ -57,36 +58,25 @@ JSON_SCHEMA = {
     ]
 }
 
-def main():
-    s3 = boto3.resource("s3")
-    bucket = s3.Bucket(REQUESTS_BUCKET)
-
-    end_time = time.time() + 1 # TODO: Change runtime from 1 seconds
-    while time.time() < end_time:
-        # Attempt to retrieve request with smallest key
-        for request in bucket.objects.limit(1):
-            # Load request body before processing
-            parsed_request = parse_request_to_json(request.get()['Body'].read().decode("utf-8"))
-            process_request(parsed_request)
-            
-        time.sleep(0.1)
+class Consumer:
+    def __init__(self, source, destination):
+        pass
         
-# Process request (dict)
-def process_request(request):
-    print(f"Processing {request.key}:")
     
-    print()
-    
-def parse_request_to_json(request):
-    try:
-        # Parse data and validate against schema
-        data = json.loads()
-        jsonschema.validate(instance=data, schema=JSON_SCHEMA)
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e.message}")
-    except jsonschema.ValidationError as e:
-        print(f"Error validating Schema: {e.message}")
-    return data
-    
+def create_command_parser():
+    parser = argparse.ArgumentParser(
+        prog="Consumer",
+        description="Creates widget requests")
+    parser.add_argument("-rb", "--request-bucket", metavar="Request Bucket", required=True)
+        
+    # The destination may be either an S3 bucket or a DynamoDB table
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-wb", "--widget-bucket", metavar="Widget Bucket") # Bucket
+    group.add_argument("-dwt", metavar="Widget DynamoDB Table") # DynamoDB table
+    return parser
+        
 if __name__ == "__main__":
-    main()
+    command_parser = create_command_parser()
+    args = command_parser.parse_args()
+    print(args)
+    print(args.request_bucket)
