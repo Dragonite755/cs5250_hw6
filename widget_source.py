@@ -1,20 +1,29 @@
 from abc import ABC, abstractmethod
+import json
 import boto3
 
-def source_factory(source_type, name):
-    if source_type == "request-bucket":
-        return BucketSource(name)
-    return None
-
-class RequestSource():
+class RequestSource(ABC):
     @abstractmethod
-    def get_request():
+    def poll_request(self):
         pass
         
 class BucketSource(RequestSource):
     def __init__(self, bucket_name):
+        s3 = boto3.resource("s3")
         self.__bucket = s3.Bucket(bucket_name)
         
-    def get_request(self):
-        objects = list(self.__bucket.objects.limit(count=1))
-        print(objects)
+    def poll_request(self):
+        try:
+            objects = list(self.__bucket.objects.limit(count=1))
+            if not objects:
+                return None
+            request = objects[0]
+                
+            json_string = request.get()["Body"].read().decode("utf-8")
+            data = json.loads(json_string)
+            
+            request.delete()
+        except Exception as e:
+            print(e.message())
+        
+        return data
