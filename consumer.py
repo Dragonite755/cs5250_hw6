@@ -60,8 +60,10 @@ JSON_SCHEMA = {
 
 class Consumer:
     def __init__(self, source, destination):
-        pass
+        self.__source = source
+        self.__destination = destination
         
+    
     
 def create_command_parser():
     parser = argparse.ArgumentParser(
