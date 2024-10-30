@@ -8,125 +8,137 @@ Requirements:
 - Change widgets
 - Unit testing (to be added)
 
-class Consumer:
-	commandparser: ArgumentParser
-	widget_handler: WidgetHandler
-	unchangeable_attributes: ["id", "owner"]
+# Main code
+main():
+	create parser
+	parse args
+	create RequestSource and WidgetDestination objects according to args
+	create Consumer object with source and destination
+	process requests with one-minute timeout
+	
+def create_command_parser():
+	create command line parser
+		take request bucket argument (-rb/--request-bucket)
+		take either widget bucket (-wb/--widget-bucket) or widget DynamoDB table (-dwt)
+	return parser
 
-	def __init__():
-		create command line arguments
-		parse command line arguments
+# Consumer class
+class Consumer:
+	source: RequestSource
+	destination: WidgetDestination
+
+	def __init__(source, destination):
 		set destination address and strategy functions according to address type (bucket or database)
 
 	# Main loop that processes request until program ends 
-	def main():
-		Parse command line arguments
-		Loop until some stop condition is met
-			Get request from widget_handler:
-				If not null, 
-			Else
-			  Wait (100 ms)
-		End loop
+	def process_requests(timeout)
+		set end time according to timeout
+		loop until timeout 
+			get request from source:
+				if not null, process it in destination
+			else:
+				wait 100 ms
+
+### Request Source classes
+	
+# Abstract class for retrieving widget requests from a source
+class RequestSource():
+	def get_request()
+	
+# Retrieves widget requests from a bucket 
+class BucketSource(RequestSource):
+	bucket: bucket object
+	
+	def __init__(bucket_name):
+		create bucket object from bucket url
 		
-	def create_command_parser():
-		create commandparser
-		set -rb and -dwt arguments
+	def get_request() :
+		retrieve a single object from the bucket
+			if the collection is empty, log and return
+		decode and parse object body into JSON, then return
 		
-	def parse_commandline():
-		if -rb argument was provided, set widget_handler to a BucketHandler with the given bucket name
-		elif -dwt argument was provided, set widget_handler to a DatabaseHandler with the given DynamoDB table name	
+### Widget Destination classes
+
+# Abstract class for handling widget requests for a given destination type
+class WidgetDestination():
+	unchangeable_attributes = ["id", "owner"]
+
+	def create(request)
+	def delete(request)
+	def update(request)
+	def get_widget(request)
+	def update_widget(widget, request)
+	
+# Handles widget requests with an S3 bucket destination
+class BucketDestination(WidgetDestination):
+	bucket: bucket object
+
+	# pass in bucket name (not full url)
+	def __init__(bucket_name):
+		set bucket to bucket object at bucket url
+
+	# Turn request into an object with a new key and put into bucket
+	def create(request):
+		serialize all request attributes (except requestId) into JSON string
+		store string in destination bucket with key from create_key(request)
+		log result
 		
+	# Attempt to delete widget
+	def delete(request):
+		get widget from bucket
+			if null, log warning and return
+		delete widget from bucket
+		log result
+		
+	# Attempt to modify request
+	def update(request):
+		get widget from bucket
+			if null, log warning and return
+		update widget and put into table
+		
+	# Return widget if it exists and null if it does not
+	def get_widget(request):
+		create widget key and get it from bucket
+			if widget does not exist in bucket, return null
+		parse object body to JSON
+			return JSON
+			
 	def update_widget(widget, request):
-		for every attribute in request that is not in unchangeable or otherAttributes:
-			if request attribute is an empty string, set property to null
-		for every attribute in request.otherAttributes:
-			if request attribute is an empty string, delete attribute from widget
-		return updated widget
-		
-	# Abstract class for retrieving widget requests from a source
-	class WidgetRequestSource():
-		def get_request()
-		
-	# Retrieving widget requests from a bucket 
-	class BucketSource(WidgetRequestSource):
-		bucket: bucket object
-		
-		def __init__(bucket_name):
-			create bucket object from bucket url
+		for attribute in request not in unchangeable_attributes and not otherAttributes:
+			if request[attribute] is an empty string, set widget[attribute] = request[attribute]
+		for attribute in otherAttributes:
+			if request[attribute] is an empty string, set widget[attribute] = request[attribute] 
 			
-		def get_request() :
-			retrieve a single object from the bucket
-				if the collection is empty, log and return
-			decode and parse object body into JSON, then return
-		
-	# Abstract class for handling widget requests for a given destination type
-	class WidgetDestination():
-		def create(request)
-		def delete(request)
-		def update(request)
-		def get_widget(request)
-		
-	# Handles widget requests with an S3 bucket destination
-	class BucketDestination(WidgetDestination):
-		bucket: bucket object
+	# Creates a key for a request
+	def make_key(request):
+		take the owner attribute string, replace spaces with dashes and convert it into lowercase
+		return the key "widgets/{owner}/{widgetId}"
+
+# Handles widget requests with a DynamoDB bucket destination
+class DynamoDBDestination(WidgetDestination):
+	table: table_name
 	
-		# pass in bucket name (not full url)
-		def __init__(bucket_name):
-			set bucket to bucket object at bucket url
-	
-		# Turn request into an object with a new key and put into bucket
-		def create(request):
-			serialize all request attributes (except requestId) into JSON string
-			store string in destination bucket with key from create_key(request)
-			log result
-			
-		# Attempt to delete widget
-		def delete(request):
-			get widget from bucket
-				if null, log warning and return
-			delete widget from bucket
-			log result
-			
-		# Attempt to modify request
-		def update(request):
-			get widget from bucket
-				if null, log warning and return
-			update widget and put into table
-			
-		# Creates a key for a request
-		def make_key(request):
-			take the owner attribute string, replace spaces with dashes and convert it into lowercase
-			return the key "widgets/{owner}/{widgetId}"
-			
-		# Return widget if it exists and null if it does not
-		def get_widget(request):
-			create widget key and get it from bucket
-				if widget does not exist in bucket, return null
-			parse object body to JSON
-				return JSON
-	
-	# Handles widget requests with a DynamoDB bucket destination
-	class DynamoDBDestination(WidgetDestination):
-		table: table_name
+	def __init__(table_name):
+		create table object for the given table name
 		
-		def __init__(table_name):
-			create table object for the given table name
-			
-		def create(request):
-			move element of otherAttributes into request
-			put object into table
-			
-		def delete(request):
-			get widget from table
-				if it does not exist, log warning and return
-			delete widget from table
+	def create(request):
+		move element of otherAttributes into request
+		put object into table
 		
-		def update(request):
-			get widget from table`
-				if it does not exist, log warning and return
-			update widget and put updated widget into table
-			
-		def get_widget(request):
-			get widget from bucket
-				if it does not exist, return null
-			return widget
+	def delete(request):
+		get widget from table
+			if it does not exist, log warning and return
+		delete widget from table
+	
+	def update(request):
+		get widget from table`
+			if it does not exist, log warning and return
+		update widget and put updated widget into table
+		
+	def get_widget(request):
+		get widget from bucket
+			if it does not exist, return null
+		return widget
+		
+	for attribute in request not in unchangeable_attributes:
+			if request[attribute] is an empty string, set widget[attribute] = request[attribute]
