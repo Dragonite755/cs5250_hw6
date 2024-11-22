@@ -3,6 +3,10 @@ import json
 import boto3
 
 class RequestSource(ABC):
+    """
+    Read first request found in source and delete it
+    Return JSON of request if found, None otherwise
+    """
     @abstractmethod
     def poll_request(self):
         pass
@@ -16,14 +20,13 @@ class BucketSource(RequestSource):
         try:
             objects = list(self.__bucket.objects.limit(count=1))
             if not objects:
-                return None
+                return
             request = objects[0]
                 
             json_string = request.get()["Body"].read().decode("utf-8")
             data = json.loads(json_string)
             
             request.delete()
+            return data
         except Exception as e:
             print(e.message())
-        
-        return data

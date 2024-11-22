@@ -98,7 +98,7 @@ def create_command_parser():
     # The destination may be either an S3 bucket or a DynamoDB table
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-wb", "--widget-bucket", metavar="Widget Bucket") # Bucket
-    group.add_argument("-dwt", metavar="Widget DynamoDB Table") # DynamoDB table
+    group.add_argument("-dwt", "--dynamo-table", metavar="Widget DynamoDB Table") # DynamoDB table
     return parser
     
 def parse_source(args):
@@ -108,6 +108,8 @@ def parse_source(args):
 def parse_destination(args):
     if args.widget_bucket:
         return widget_destination.BucketDestination(args.widget_bucket)
+    elif args.dynamo_table:
+        return widget_destination.DynamoDBDestination(args.dynamo_table)
 
 if __name__ == "__main__":
     command_parser = create_command_parser()
