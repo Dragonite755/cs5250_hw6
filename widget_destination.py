@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
+import logging
 import boto3
 import json
+
+logger = logging.getLogger(__name__)
 
 class WidgetDestination(ABC):
     """
@@ -28,37 +31,58 @@ class BucketDestination(WidgetDestination):
     def __init__(self, bucket_name):
         s3 = boto3.resource("s3")
         self.__bucket = s3.Bucket(bucket_name)
-        self.__unchangeable = {"widgetId", "owner"} # Unchangeable attributes
+        self.__unchangeable = {"id", "owner"} # Unchangeable attributes
+        self.__logger = logging.getLogger(__name__)
         
-    def create(self, request):
-        print(f"Creating {request["widgetId"]}\n")
+    def create(self, request, request_id):
+        logger.info(f"Process a create request for widget {request['id']} in request {request['requestId']}")
+        
+        request_id = request["requestId"]
+        del request["requestId"]
+        
         key = self.make_key(request)
         json_string=json.dumps(request)
-        self.__bucket.put_object(Body=json_string, Key=key)
+        
+        try:
+            self.__bucket.put_object(Body=json_string, Key=key)
+            logger.info(f"Put in S3 bucket a widget with key = {key}")
+        except:
+            logger.warning(f"Could not put in S3 bucket a widget with key = {key}")
         
     def delete(self, request):
-        print(f"Deleting {request["widgetId"]}\n")
+        logger.info(f"Process a delete request for widget {request['id']} in request {request['requestId']}")
+        
+        request_id = request["requestId"]
+        del request["requestId"]
+    
         key = self.make_key(request)
         try:
             # Read object with given key
             widget_object = self.__bucket.Object(key)
             widget_object.load() # Will cause exception if object does not exist
-            widget_object.delete()
-        except ClientError as e:
-            print("Object does not exist")
+            widget_object.delete() 
+            logger.info(f"Delete from S3 bucket a widget with key = {key}")
+        except:
+            logger.warning(f"Widget with key = {key} does not exist in S3 bucket")
         
     def update(self, request):
-        print(f"Updating {request["widgetId"]}\n")
+        logger.info(f"Process an update request for widget {request['id']} in request {request['requestId']}")
+        
+        request_id = request["requestId"]
+        del request["requestId"]
+        
+        key = self.make_key(request)
         try:
-            key = self.make_key(request)
             widget_object = self.__bucket.Object(key)
+            widget_object.load() # Will cause exception if object does not exist
             old_json_string = widget_object.get()["Body"].read().decode("utf-8")
             old_widget = json.loads(old_json_string)
             updated_widget = self.update_widget(old_widget, request)
             json_string = json.dumps(updated_widget)
             widget_object.put(Body=json_string)
-        except ClientError as e:
-            print("Object does not exist")
+            logger.info(f"Update in S3 bucket a widget with key = {key}")
+        except:
+            logger.warning(f"Widget with key = {key} does not exist in S3 bucket")
         
     """
     Update the fields in widget with the fields from update
@@ -80,37 +104,60 @@ class BucketDestination(WidgetDestination):
                     widget[attribute] = None
                     
     """
-    Create key from request data
+    Create key from request data (before it is cleaned)
     """
     def make_key(self, data):
         owner = data["owner"].replace(" ", "-").lower()
-        widgetId = data["widgetId"]
+        widgetId = data["id"]
         return f"widgets/{owner}/{widgetId}"
         
 class DynamoDBDestination(WidgetDestination):
-    def __init__(self, table_name):
-        dynamodb = boto3.resource("dynamodb")
+    def __init__(self, table_name, region):
+        dynamodb = boto3.resource("dynamodb", region_name=region)
         self.__table = dynamodb.Table(table_name)
         
     def create(self, request):
-        createWidgetData(request)
-        json_string=json.dumps(request)
-        self.__table.put_item(Item=json_string)
+        logger.info(f"Process a create request for widget {request['id']} in request {request['requestId']}")
         
-    def delete(self, request):
-        id = request["widgetId"]
-        try:
-            self.__table.delete_item(Key=key)
-        except:
-            print("WARNING Widget with id "{key}" does not exist")
+        request_id = request["requestId"]
+        del request["requestId"]
         
-    def update(self, request):
-        createWidgetData(request)
-        
-    def createWidgetData(self, request):
+        # Place all attributes in otherAttributes into their own attributes
         if "otherAttributes" in request:
             for data in request["otherAttributes"]:
-                for attribute, value in data.items():
-                    request[attribute] = value
-        request["id"] = request["widgetId"]
-        del request["widgetId"]
+                name = data["name"]
+                value = data["value"]
+                request[name] = value
+            del request["otherAttributes"]
+        
+        key = request["id"]
+        try:
+            self.__table.put_item(Item=request)
+            logger.info(f"Put in DynamoDB Table a widget with key = {key}")
+        except:
+            logger.warning(f"Could not put in DynamoDB Table a widget with key = {key}")
+        
+    def delete(self, request):
+        logger.info(f"Process a delete request for widget {request['id']} in request {request['requestId']}")
+        
+        request_id = request["requestId"]
+        del request["requestId"]
+        
+        key = request["id"]
+        response = self.__table.get_item(Key=key)
+        try:
+            if 'Item' in response:
+                self.__table
+            else:
+                logger.warning(f"Widget with key = {key} does not exist in DynamoDB Table")
+        except:
+            logger.warning(f"Could not delete widget with key = {key}")
+        
+    def update(self, request):
+        logger.info(f"Process an update request for widget {request['id']} in request {request['requestId']}")
+    
+        request_id = request["requestId"]
+        del request["requestId"]
+        
+        
+        

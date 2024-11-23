@@ -2,70 +2,19 @@ import time
 import json
 import jsonschema
 import argparse
+import logging
 
 import widget_source
 import widget_destination
 
-REQUESTS_BUCKET = "usu-cs5250-ratatouille-requests"
-JSON_SCHEMA = {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type": "object",
-    "properties": {
-        "type": {
-            "type": "string",
-            "pattern": "create|delete|update"
-        },
-        "requestId": {
-            "type": "string"
-        },
-        "widgetId": {
-            "type": "string"
-        },
-        "owner": {
-            "type": "string",
-            "pattern": "[A-Za-z ]+"
-        },
-            "label": {
-            "type": "string"
-        },
-        "description": {
-            "type": "string"
-        },
-        "otherAttributes": {
-            "type": "array",
-            "items": [
-                {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string"
-                        },
-                        "value": {
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name",
-                        "value"
-                    ]
-                }
-            ]
-        }
-    },
-    "required": [
-        "type",
-        "requestId",
-        "widgetId",
-        "owner"
-    ]
-}
+REGION = "us-east-1"
 
 class Consumer:
     def __init__(self, source, destination):
         self.__source = source
         self.__destination = destination 
         
-    def process_requests(self, timeout=5):
+    def process_requests(self, timeout=15):
         end_time = time.time() + timeout
         while self.check_time(end_time):
             # Retrieve request as JSON dictionary
@@ -73,14 +22,21 @@ class Consumer:
             if not self.process_request(request):
                 time.sleep(0.1)
         
-    def process_request(self, request): 
+    def process_request(self, request):
         if not request:
             return False
-        elif request["type"] == "create":
+            
+        # Modify request before processing
+        request["id"] = request["widgetId"]
+        request_type = request["type"]
+        del request["widgetId"]
+        del request["type"]
+        
+        if request_type == "create":
             self.__destination.create(request)
-        elif request["type"] == "delete":
+        elif request_type == "delete":
             self.__destination.delete(request)
-        elif request["type"] == "update":
+        elif request_type == "update":
             self.__destination.update(request)
         else:
             return False
@@ -109,13 +65,19 @@ def parse_destination(args):
     if args.widget_bucket:
         return widget_destination.BucketDestination(args.widget_bucket)
     elif args.dynamo_table:
-        return widget_destination.DynamoDBDestination(args.dynamo_table)
+        return widget_destination.DynamoDBDestination(args.dynamo_table, REGION)
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging.INFO,
+        datefmt='%H:%M:%S',
+        handlers=[logging.FileHandler('consumer.log', encoding='utf-8',),
+            logging.StreamHandler()])
+    
     command_parser = create_command_parser()
     args = command_parser.parse_args()
-    print(args)
-    print()
     
     source = parse_source(args)
     destination = parse_destination(args)

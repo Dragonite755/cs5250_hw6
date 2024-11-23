@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 import json
 import boto3
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RequestSource(ABC):
     """
@@ -18,15 +21,18 @@ class BucketSource(RequestSource):
         
     def poll_request(self):
         try:
+            logger.info("Poll request from S3 bucket")
             objects = list(self.__bucket.objects.limit(count=1))
             if not objects:
-                return
-            request = objects[0]
+                logger.info("No items found in S3 bucket")
+                return # Return None if no objects are found
+            request_object = objects[0]
                 
-            json_string = request.get()["Body"].read().decode("utf-8")
-            data = json.loads(json_string)
+            json_string = request_object.get()["Body"].read().decode("utf-8")
+            request = json.loads(json_string)
+            logger.info(f"Found request with id {request['requestId']} in S3 bucket")
             
-            request.delete()
-            return data
-        except Exception as e:
-            print(e.message())
+            request_object.delete()
+            return request
+        except:
+            logger.warning("Failed to poll request from S3 bucket")
